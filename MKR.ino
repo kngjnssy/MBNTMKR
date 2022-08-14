@@ -8,9 +8,12 @@
 #include <Adafruit_GFX.h>
 #include <Adafruit_SSD1306.h>
 #include "secrets.h"
+#include "MHZ19.h"
 
-const int pwmpin = 4;
-const int range = 5000;
+MHZ19 myMHZ19;
+
+//const int pwmpin = 4;
+//const int range = 5000;
 
 char ssid[] = SECRET_SSID;        // your network SSID (name)
 char pass[] = SECRET_PASS;    // your network password (use for WPA, or use as key for WEP)
@@ -41,9 +44,10 @@ void setup() {
   net.addCallback(NetworkConnectionEvent::DISCONNECTED, onNetworkDisconnect);
   net.addCallback(NetworkConnectionEvent::ERROR, onNetworkError);
 
-  pinMode(pwmpin, INPUT);
+  //  pinMode(pwmpin, INPUT);
 
   thing.add_wifi(SECRET_SSID, SECRET_PASS);
+
   thing["Temperature"] >> [](pson & out) {
     out = temperatureInC();
   };
@@ -51,11 +55,11 @@ void setup() {
     out = humidity();
   };
   thing["CO2"] >> [](pson & out) {
-    out = readCO2UART();
+    out = getCO2UART();
   };
-  thing["CO2pwm"] >> [](pson & out) {
-    out = readCO2PWM();
-  };
+    thing["CO2lib"] >> [](pson & out) {
+      out = CO2lib();
+    };
 
   thing["rssi"] >> [](pson & out) {
     out = WIFIrssi();
@@ -63,6 +67,8 @@ void setup() {
 
   // MZH-19B setup
   Serial1.begin(9600);  //Initialisierung der seriellen Schnittstelle für den ersten Sensor
+  myMHZ19.begin(Serial1);                                // *Serial(Stream) refence must be passed to library begin().
+  myMHZ19.autoCalibration();                              // Turn auto calibration ON (OFF autoCalibration(false))
 
   Serial.begin(9600);
   if (!display.begin(SSD1306_SWITCHCAPVCC, SCREEN_ADDRESS)) {
@@ -107,47 +113,6 @@ void onNetworkError() {
   Serial.println(">>>> ERROR");
 }
 
-byte getCheckSum(byte *packet)
-{
-  byte checksum = 0;
-  for ( int i = 1; i < 8; i++)
-  {
-    checksum += packet[i];
-  }
-  checksum = 0xFF - checksum;
-  checksum += 1;
-  return checksum;
-}
-
-unsigned long lastMillis = 0;
-
-float readCO2UART() {
-  byte com[] = {0xff, 0x01, 0x86, 0x00, 0x00, 0x00, 0x00, 0x00, 0x79};  //Befehl zum Auslesen der CO2 Konzentration
-  unsigned char response[9];                                                      //hier kommt der zurückgegeben Wert des ersten Sensors rein
-
-  Serial1.write(com, 9);                       //Befehl zum Auslesen der CO2 Konzentration
-  Serial1.readBytes(response, 9);               //Auslesen der Antwort
-
-  unsigned int responseHigh = (unsigned int) response[2];
-  unsigned int responseLow = (unsigned int) response[3];
-  int concentration = (256 * responseHigh) + responseLow;
-  return concentration;
-}
-
-int readCO2PWM() {
-  unsigned long th, tl;
-  int ppm_pwm = 0;
-
-  do {
-    th = pulseIn(pwmpin, HIGH, 1004000) / 1000;
-    tl = 1004 - th;
-    //    float pulsepercent = th / 1004.0;
-    ppm_pwm = range * (th - 2) / (th + tl - 4);
-  } while (th == 0);
-
-  return ppm_pwm;
-}
-
 void printData() {
   Serial.println("Board Information:");
   // print your board's IP address:
@@ -178,8 +143,13 @@ float humidity() {
 }
 
 float WIFIrssi() {
-  long rssi = WiFi.RSSI();
+  int rssi = WiFi.RSSI();
   return rssi;
+}
+
+float CO2lib() {
+  int co2lib = myMHZ19.getCO2();
+  return co2lib;
 }
 
 
@@ -192,6 +162,9 @@ void loop() {
 
     float h = dht.readHumidity();
     float t = dht.readTemperature();
+
+    static int CO2 = 0;
+    CO2 = myMHZ19.getCO2();  // Request CO2 (as ppm)
 
     if (isnan(h) || isnan(t)) {
       Serial.println(F("Failed to read from DHT sensor!"));
@@ -210,7 +183,7 @@ void loop() {
     Serial.println(F("°C "));
     delay(5000);
     display.clearDisplay();
-//    display.drawRect(0, 0, SCREEN_WIDTH, SCREEN_HEIGHT, SSD1306_WHITE);
+    //    display.drawRect(0, 0, SCREEN_WIDTH, SCREEN_HEIGHT, SSD1306_WHITE);
 
     display.setCursor(6, 3);
     display.print("T ");
@@ -220,27 +193,14 @@ void loop() {
     display.print("H ");
     display.print(h);
     display.print(" %");
-    int ppm_txrx = readCO2UART();
-    int ppm_pwm = readCO2PWM();
-//    Serial.println("------------------------------------------------------");
-//    Serial.print("txrx ppm: ");
-//    Serial.println(ppm_txrx);
-//    Serial.print("PPM PWM: ");
-//    Serial.println(ppm_pwm);
-
-    display.setCursor(75, 3);
-    display.print("TXRX/PWM");
-    display.setCursor(75, 12);
-    display.print(ppm_txrx);
-    display.print("/");
-    display.setCursor(75, 21);
-    display.print(ppm_pwm);
-    display.print(" PPM");
 
     display.setCursor(6, 21);
     display.print("RSSI ");
     display.print(rssi);
 
+    getCO2UART();
+    display.setCursor(80, 12);
+    display.print(CO2);
     display.display();
 
   }
