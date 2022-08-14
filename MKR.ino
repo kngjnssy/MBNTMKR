@@ -1,7 +1,6 @@
 #include <SPI.h>
 #include <WiFi101.h>
 #include <WiFi101OTA.h>
-//#include <ArduinoOTA.h>
 #include <ThingerWifi101.h>
 #include <Arduino_WiFiConnectionHandler.h>
 #include <DHT.h>
@@ -9,6 +8,9 @@
 #include <Adafruit_GFX.h>
 #include <Adafruit_SSD1306.h>
 #include "secrets.h"
+
+const int pwmpin = 4;
+const int range = 5000;
 
 char ssid[] = SECRET_SSID;        // your network SSID (name)
 char pass[] = SECRET_PASS;    // your network password (use for WPA, or use as key for WEP)
@@ -29,7 +31,7 @@ Adafruit_SSD1306 display(SCREEN_WIDTH, SCREEN_HEIGHT, &Wire, OLED_RESET);
 
 float hum;  //Stores humidity value
 float temp; //Stores temperature value
-
+long rssi;
 ThingerWifi101 thing(USERNAME, DEVICENAME, TOKEN);
 
 void setup() {
@@ -39,9 +41,7 @@ void setup() {
   net.addCallback(NetworkConnectionEvent::DISCONNECTED, onNetworkDisconnect);
   net.addCallback(NetworkConnectionEvent::ERROR, onNetworkError);
 
-
-  // start the WiFi OTA library with internal (flash) based storage
-  //  WiFiOTA.begin("Arduino", "password", InternalStorage);
+  pinMode(pwmpin, INPUT);
 
   thing.add_wifi(SECRET_SSID, SECRET_PASS);
   thing["Temperature"] >> [](pson & out) {
@@ -51,8 +51,12 @@ void setup() {
     out = humidity();
   };
   thing["CO2"] >> [](pson & out) {
-    out = co2ppm();
+    out = readCO2UART();
   };
+  thing["CO2pwm"] >> [](pson & out) {
+    out = readCO2PWM();
+  };
+
   thing["rssi"] >> [](pson & out) {
     out = WIFIrssi();
   };
@@ -82,7 +86,6 @@ void setup() {
 
   Serial.println("----------------------------------------");
   printData();
-  printWifiStatus();
   Serial.println("----------------------------------------");
   dht.begin();
 }
@@ -104,6 +107,46 @@ void onNetworkError() {
   Serial.println(">>>> ERROR");
 }
 
+byte getCheckSum(byte *packet)
+{
+  byte checksum = 0;
+  for ( int i = 1; i < 8; i++)
+  {
+    checksum += packet[i];
+  }
+  checksum = 0xFF - checksum;
+  checksum += 1;
+  return checksum;
+}
+
+unsigned long lastMillis = 0;
+
+float readCO2UART() {
+  byte com[] = {0xff, 0x01, 0x86, 0x00, 0x00, 0x00, 0x00, 0x00, 0x79};  //Befehl zum Auslesen der CO2 Konzentration
+  unsigned char response[9];                                                      //hier kommt der zurückgegeben Wert des ersten Sensors rein
+
+  Serial1.write(com, 9);                       //Befehl zum Auslesen der CO2 Konzentration
+  Serial1.readBytes(response, 9);               //Auslesen der Antwort
+
+  unsigned int responseHigh = (unsigned int) response[2];
+  unsigned int responseLow = (unsigned int) response[3];
+  int concentration = (256 * responseHigh) + responseLow;
+  return concentration;
+}
+
+int readCO2PWM() {
+  unsigned long th, tl;
+  int ppm_pwm = 0;
+
+  do {
+    th = pulseIn(pwmpin, HIGH, 1004000) / 1000;
+    tl = 1004 - th;
+    //    float pulsepercent = th / 1004.0;
+    ppm_pwm = range * (th - 2) / (th + tl - 4);
+  } while (th == 0);
+
+  return ppm_pwm;
+}
 
 void printData() {
   Serial.println("Board Information:");
@@ -118,77 +161,11 @@ void printData() {
   Serial.println(WiFi.SSID());
 
   // print the received signal strength:
-  long rssi = WiFi.RSSI();
+  rssi = WiFi.RSSI();
   Serial.print("signal strength (RSSI):");
   Serial.println(rssi);
 }
 
-void printWifiStatus() {
-  // print the SSID of the network you're attached to:
-  Serial.print("SSID: ");
-  Serial.println(WiFi.SSID());
-
-  // print your WiFi shield's IP address:
-  IPAddress ip = WiFi.localIP();
-  Serial.print("IP Address: ");
-  Serial.println(ip);
-
-  // print the received signal strength:
-  long rssi = WiFi.RSSI();
-  Serial.print("signal strength (RSSI):");
-  Serial.print(rssi);
-  Serial.println(" dBm");
-  display.setCursor(95, 3);
-  display.print("RSSI");
-  display.setCursor(95, 12);
-  display.print(rssi);
-  display.setCursor(95, 21);
-  display.print("dBm");
-  display.display();
-}
-
-byte getCheckSum(byte *packet)
-{
-  byte checksum = 0;
-  for ( int i = 1; i < 8; i++)
-  {
-    checksum += packet[i];
-  }
-  checksum = 0xFF - checksum;
-  checksum += 1;
-  return checksum;
-}
-
-void readCO2() {
-  // Read MH-Z19B
-  Serial.println("Read MH-Z19...");
-  byte com[] = {0xff, 0x01, 0x86, 0x00, 0x00, 0x00, 0x00, 0x00, 0x79};  //Befehl zum Auslesen der CO2 Konzentration
-  byte return1[9];                                                      //hier kommt der zurückgegeben Wert des ersten Sensors rein
-
-  while (Serial1.available() > 0) {    //Hier wird der Buffer der Seriellen Schnittstelle gelehrt
-    Serial1.read();
-  }
-
-  Serial1.write(com, 9);                       //Befehl zum Auslesen der CO2 Konzentration
-  Serial1.readBytes(return1, 9);               //Auslesen der Antwort
-
-  int concentration = 0;                      //CO2-Konzentration des Sensors
-  if (getCheckSum(return1) != return1[8]) {
-    Serial.println("Checksum error");
-  } else {
-    concentration = return1[2] * 256 + return1[3]; //Berechnung der Konzentration
-    Serial.print("MH-Z19 sample OK: ");
-    Serial.print(concentration); ; Serial.println(" ppm");
-  }
-  display.setCursor(6, 21);
-  display.print("CO2 ");
-  display.print(concentration);
-  display.print(" PPM");
-  display.display();
-  delay(2000);
-}
-
-unsigned long lastMillis = 0;
 
 float temperatureInC() {
   float tempinC = dht.readTemperature();
@@ -205,30 +182,6 @@ float WIFIrssi() {
   return rssi;
 }
 
-float co2ppm() {
-  // Read MH-Z19B
-  Serial.println("Read MH-Z19...");
-  byte com[] = {0xff, 0x01, 0x86, 0x00, 0x00, 0x00, 0x00, 0x00, 0x79};  //Befehl zum Auslesen der CO2 Konzentration
-  byte return1[9];                                                      //hier kommt der zurückgegeben Wert des ersten Sensors rein
-
-  while (Serial1.available() > 0) {    //Hier wird der Buffer der Seriellen Schnittstelle gelehrt
-    Serial1.read();
-  }
-
-  Serial1.write(com, 9);                       //Befehl zum Auslesen der CO2 Konzentration
-  Serial1.readBytes(return1, 9);               //Auslesen der Antwort
-
-  int concentration = 0;                      //CO2-Konzentration des Sensors
-  if (getCheckSum(return1) != return1[8]) {
-    Serial.println("Checksum error");
-  } else {
-    concentration = return1[2] * 256 + return1[3]; //Berechnung der Konzentration
-    Serial.print("MH-Z19 sample OK: ");
-    Serial.print(concentration); ; Serial.println(" ppm");
-  }
-  return concentration;
-}
-
 
 void loop() {
   net.check();
@@ -236,10 +189,6 @@ void loop() {
   {
     WiFiOTA.poll();
     thing.handle();
-
-    if (status == WL_CONNECTED) {
-      printWifiStatus();
-    }
 
     float h = dht.readHumidity();
     float t = dht.readTemperature();
@@ -261,7 +210,7 @@ void loop() {
     Serial.println(F("°C "));
     delay(5000);
     display.clearDisplay();
-    display.drawRect(0, 0, SCREEN_WIDTH, SCREEN_HEIGHT, SSD1306_WHITE);
+//    display.drawRect(0, 0, SCREEN_WIDTH, SCREEN_HEIGHT, SSD1306_WHITE);
 
     display.setCursor(6, 3);
     display.print("T ");
@@ -271,10 +220,28 @@ void loop() {
     display.print("H ");
     display.print(h);
     display.print(" %");
+    int ppm_txrx = readCO2UART();
+    int ppm_pwm = readCO2PWM();
+//    Serial.println("------------------------------------------------------");
+//    Serial.print("txrx ppm: ");
+//    Serial.println(ppm_txrx);
+//    Serial.print("PPM PWM: ");
+//    Serial.println(ppm_pwm);
+
+    display.setCursor(75, 3);
+    display.print("TXRX/PWM");
+    display.setCursor(75, 12);
+    display.print(ppm_txrx);
+    display.print("/");
+    display.setCursor(75, 21);
+    display.print(ppm_pwm);
+    display.print(" PPM");
+
+    display.setCursor(6, 21);
+    display.print("RSSI ");
+    display.print(rssi);
+
     display.display();
-    readCO2();
+
   }
-
-
-
 }
