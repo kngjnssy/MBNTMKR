@@ -22,7 +22,7 @@ float getCO2UART() {
   display.print(concentration);
   display.print(" PPM");
   display.display();
-  delay(2000);
+  delay(10000);
 
   return concentration;
 }
