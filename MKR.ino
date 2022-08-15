@@ -140,11 +140,11 @@ void loop() {
     display.print(rssi);
 
     getCO2UART();
-    display.setCursor(80, 12);
-    display.print("lib:");
+    display.setCursor(80, 3);
+    display.print("custom/lib");
     display.setCursor(80, 21);
     display.print(CO2);
-    display.print(" PPM");
+    display.print(" PPM/");
     display.display();
     delay(5000);
 
