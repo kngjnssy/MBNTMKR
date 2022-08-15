@@ -126,25 +126,25 @@ void loop() {
     display.clearDisplay();
     //    display.drawRect(0, 0, SCREEN_WIDTH, SCREEN_HEIGHT, SSD1306_WHITE);
 
-    display.setCursor(6, 3);
+    display.setCursor(0, 3);
     display.print("T ");
     display.print(t);
     display.print(" C");
-    display.setCursor(6, 12);
+    display.setCursor(0, 12);
     display.print("H ");
     display.print(h);
     display.print(" %");
 
-    display.setCursor(6, 21);
+    display.setCursor(0, 21);
     display.print("RSSI ");
     display.print(rssi);
 
     getCO2UART();
-    display.setCursor(80, 3);
+    display.setCursor(67, 3);
     display.print("custom/lib");
-    display.setCursor(80, 21);
+    display.setCursor(67, 21);
     display.print(CO2);
-    display.print(" PPM/");
+    display.print(" PPM");
     display.display();
     delay(5000);
 

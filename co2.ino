@@ -18,9 +18,9 @@ float getCO2UART() {
 //    Serial.print(concentration); ; Serial.println(" ppm");
   }
   
-  display.setCursor(80, 12);
+  display.setCursor(67, 12);
   display.print(concentration);
-  display.print(" PPM");
+  display.print(" PPM/");
   display.display();
 
   return concentration;
