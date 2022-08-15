@@ -9,6 +9,8 @@
 #include <Adafruit_SSD1306.h>
 #include "secrets.h"
 #include "MHZ19.h"
+#include <Arduino.h>
+
 
 MHZ19 myMHZ19;
 
@@ -75,6 +77,9 @@ void setup() {
     out["co2custom"] = getCO2UART();
     out["co2lib"] = myMHZ19.getCO2();
     out["rssi"] = WiFi.RSSI();
+    out["tempCO2"] = myMHZ19.getTemperature();
+    out["transmittanceCO2"] = myMHZ19.getTransmittance();
+    out["bgCO2"] = myMHZ19.getBackgroundCO2();
   };
 
 }
@@ -147,6 +152,33 @@ void loop() {
     display.print(" PPM");
     display.display();
     delay(5000);
-
+    
+//    ---------------- debug stuff ----------------
+//    double adjustedCO2 = myMHZ19.getCO2Raw();
+//
+//    Serial.println("----------------");
+//    Serial.print("Raw CO2: ");
+//    Serial.println(adjustedCO2);
+//
+//    adjustedCO2 = 6.60435861e+15 * exp(-8.78661228e-04 * adjustedCO2);      // Exponential equation for Raw & CO2 relationship
+//
+//    Serial.print("Adjusted CO2: ");
+//    Serial.print(adjustedCO2);
+//    Serial.println(" ppm");
+//    Serial.print("CO2 lib used: ");
+//    Serial.print(CO2);
+//    Serial.println(" ppm");
+//    float temp;    // Buffer for temperature
+//    float trans;
+//    float bgCO2;    // Buffer for temperature
+//    trans = myMHZ19.getTransmittance();
+//    temp = myMHZ19.getTemperature();    // Request Temperature (as Celsius)
+//    bgCO2 = myMHZ19.getBackgroundCO2();
+//    Serial.print("Temperature (C): ");
+//    Serial.println(temp);
+//    Serial.print("transmittance: ");
+//    Serial.println(trans);
+//    Serial.print("bgCO2: ");
+//    Serial.println(bgCO2);
   }
 }
