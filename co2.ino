@@ -14,15 +14,14 @@ float getCO2UART() {
     Serial.println("Checksum error");
   } else {
     concentration = return1[2] * 256 + return1[3]; //Berechnung der Konzentration
-    Serial.print("MH-Z19 sample OK: ");
-    Serial.print(concentration); ; Serial.println(" ppm");
+//    Serial.print("MH-Z19 sample OK: ");
+//    Serial.print(concentration); ; Serial.println(" ppm");
   }
   
   display.setCursor(80, 3);
   display.print(concentration);
   display.print(" PPM");
   display.display();
-  delay(10000);
 
   return concentration;
 }

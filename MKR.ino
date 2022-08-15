@@ -29,8 +29,6 @@ DHT dht(DHTPIN, DHTTYPE);
 #define SCREEN_ADDRESS 0x3C ///< See datasheet for Address; 0x3D for 128x64, 0x3C for 128x32
 Adafruit_SSD1306 display(SCREEN_WIDTH, SCREEN_HEIGHT, &Wire, OLED_RESET);
 
-//float hum;  //Stores humidity value
-//float temp; //Stores temperature value
 long rssi;
 ThingerWifi101 thing(USERNAME, DEVICE_ID, DEVICE_CREDENTIAL);
 
@@ -48,9 +46,14 @@ void setup() {
     // Connect to WPA/WPA2 network:
     status = WiFi.begin(ssid, pass);
   }
-
+  Serial.println("You're connected to the network");
+  Serial.println("----------------------------------------");
+  printWLData();
+  Serial.println("----------------------------------------");
 
   thing.add_wifi(SECRET_SSID, SECRET_PASS);
+
+  dht.begin();
 
   // MZH-19B setup
   Serial1.begin(9600);  //Initialisierung der seriellen Schnittstelle für den ersten Sensor
@@ -62,19 +65,9 @@ void setup() {
     Serial.println(F("SSD1306 allocation failed"));
     for (;;); // Don't proceed, loop forever
   }
-
-  dht.begin();
-
   display.setTextSize(1);
   display.setTextColor(WHITE, BLACK);
   display.clearDisplay();
-
-  // you're connected now, so print out the data:
-  Serial.println("You're connected to the network");
-
-  Serial.println("----------------------------------------");
-  printWLData();
-  Serial.println("----------------------------------------");
 
   thing["Vitals"] >> [](pson & out) {
     out["temperature"] = dht.readTemperature();
@@ -109,13 +102,10 @@ void printWLData() {
   IPAddress ip = WiFi.localIP();
   Serial.print("IP Address: ");
   Serial.println(ip);
-
   Serial.println();
   Serial.println("Network Information:");
   Serial.print("SSID: ");
   Serial.println(WiFi.SSID());
-
-  // print the received signal strength:
   rssi = WiFi.RSSI();
   Serial.print("signal strength (RSSI):");
   Serial.println(rssi);
@@ -128,27 +118,35 @@ void loop() {
     WiFiOTA.poll();
     thing.handle();
 
-    //    delay(5000);
-    //    display.clearDisplay();
+    float h = dht.readHumidity();
+    float t = dht.readTemperature();
+    static int CO2 = 0;
+    CO2 = myMHZ19.getCO2();
+
+    display.clearDisplay();
     //    display.drawRect(0, 0, SCREEN_WIDTH, SCREEN_HEIGHT, SSD1306_WHITE);
-    //
-    //    display.setCursor(6, 3);
-    //    display.print("T ");
-    //    display.print(t);
-    //    display.print(" C");
-    //    display.setCursor(6, 12);
-    //    display.print("H ");
-    //    display.print(h);
-    //    display.print(" %");
-    //
-    //    display.setCursor(6, 21);
-    //    display.print("RSSI ");
-    //    display.print(rssi);
-    //
-    //    getCO2UART();
-    //    display.setCursor(80, 12);
-    //    display.print(CO2);
-    //    display.display();
+
+    display.setCursor(6, 3);
+    display.print("T ");
+    display.print(t);
+    display.print(" C");
+    display.setCursor(6, 12);
+    display.print("H ");
+    display.print(h);
+    display.print(" %");
+
+    display.setCursor(6, 21);
+    display.print("RSSI ");
+    display.print(rssi);
+
+    getCO2UART();
+    display.setCursor(80, 12);
+    display.print("lib:");
+    display.setCursor(80, 21);
+    display.print(CO2);
+    display.print(" PPM");
+    display.display();
+    delay(5000);
 
   }
 }
